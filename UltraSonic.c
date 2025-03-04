@@ -10,6 +10,9 @@ static volatile uint8_t isRisingCaptured = 0;
 static volatile uint32_t IC_Value1 = 0;
 static volatile uint32_t IC_Value2 = 0;
 static volatile uint32_t IC_Difference = 0;
+#define SOUND_SPEED_CM_PER_US 0.0173  // Speed of sound in cm per µs
+#define MIN_VALID_DISTANCE 2.0        // Minimum valid distance in cm
+#define MAX_VALID_DISTANCE 400.0      // Maximum valid distance in cm
 static void Delay_10US(void){
 
 	__HAL_TIM_SET_COUNTER(ULTRASONIC_ECHO_PIN_IC,0);
@@ -32,30 +35,39 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	/* Capture rising edge */
 	if(0 == isRisingCaptured)
 	{
-		IC_Value1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+		IC_Value1 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);
 		isRisingCaptured = 1;
-		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_FALLING);
+		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_3, TIM_INPUTCHANNELPOLARITY_FALLING);
 	}
 	/* Capture falling edge */
-	else if(1 == isRisingCaptured)
+	else
 	{
-		IC_Value2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+		IC_Value2 = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3);
 		__HAL_TIM_SET_COUNTER(htim, 0);
 
-		if(IC_Value2 > IC_Value1)
-		{
-			IC_Difference = IC_Value2 - IC_Value1;
-		}
-		else if(IC_Value1 > IC_Value2)
-		{
-			IC_Difference = (0xFFFF - IC_Value1) + IC_Value2;
-		}
+		// Calculate the pulse width (time difference)
+					IC_Difference = (IC_Value2 >= IC_Value1) ?
+					                (IC_Value2 - IC_Value1) :
+					                ((0xFFFF - IC_Value1) + IC_Value2);
 
-		distance = IC_Difference * 0.0173;
+		distance = IC_Difference * SOUND_SPEED_CM_PER_US;
+
+
+		// Validate distance measurement
+		if(distance >= MIN_VALID_DISTANCE && distance <= MAX_VALID_DISTANCE)
+					{
+						isReadingFinished = 1;
+					}
+					else
+					{
+						distance = 0;  // Invalid measurement
+					}
+
+
 
 		isRisingCaptured = 0;
-		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_RISING);
-		__HAL_TIM_DISABLE_IT(&htim2, TIM_IT_CC1);
+		__HAL_TIM_SET_CAPTUREPOLARITY(htim, TIM_CHANNEL_3, TIM_INPUTCHANNELPOLARITY_RISING);
+		__HAL_TIM_DISABLE_IT(&htim2, TIM_IT_CC3);
 	}
-	else{ /* Nothing */ }
+
 }
